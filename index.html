@@ -1,118 +1,135 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>RL Maze AI - Advanced</title>
+<title>RL Maze with Key Challenge</title>
 <style>
-  body {
-    background:#0e0e11;
-    color:#eaeaea;
-    font-family: monospace;
+  body{
+    margin:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    background:linear-gradient(135deg,#dbeafe,#fef3c7);
+    font-family:monospace;
+  }
+  .panel{
+    background:#ffffffcc;
+    padding:20px 30px;
+    border-radius:16px;
+    box-shadow:0 20px 40px rgba(0,0,0,.15);
     text-align:center;
   }
-  canvas {
-    background:#111;
-    margin-top:10px;
+  canvas{
+    display:block;
+    margin:15px auto;
+    background:#f8fafc;
     border-radius:12px;
   }
+  input{ width:200px; }
 </style>
 </head>
 <body>
 
-<h2>Reinforcement Learning Maze AI</h2>
-<p id="info"></p>
-<canvas id="c" width="600" height="600"></canvas>
+<div class="panel">
+  <h2>AI Maze — Key Challenge</h2>
+  <div id="info"></div>
+  <canvas id="cv" width="480" height="480"></canvas>
+  <div>
+    Speed:
+    <input type="range" min="10" max="200" value="60" id="speed">
+  </div>
+</div>
 
 <script>
-const SIZE = 21;
-const CELL = 600 / SIZE;
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const SIZE=15, CELL=480/SIZE;
+const cv=document.getElementById("cv");
+const ctx=cv.getContext("2d");
 
-let maze = Array.from({length:SIZE},()=>Array(SIZE).fill(1));
-
-function generateMaze(r=1,c=1){
-  maze[r][c]=0;
-  const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
-  for(let [dr,dc] of dirs){
-    let nr=r+dr, nc=c+dc;
-    if(nr>0&&nc>0&&nr<SIZE-1&&nc<SIZE-1&&maze[nr][nc]){
-      maze[r+dr/2][c+dc/2]=0;
-      generateMaze(nr,nc);
-    }
-  }
-}
-generateMaze();
-
-maze[1][1]='S';
-maze[SIZE-2][SIZE-2]='G';
+let maze=[
+ [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+ [1,'S',0,0,1,0,0,0,0,0,1,0,0,'K',1],
+ [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
+ [1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
+ [1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+ [1,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
+ [1,1,1,1,1,0,1,1,1,0,1,1,1,0,1],
+ [1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
+ [1,0,1,0,1,1,1,0,1,1,1,0,1,0,1],
+ [1,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
+ [1,0,1,1,1,1,1,1,1,0,1,1,1,'D',1],
+ [1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+ [1,1,1,1,1,1,1,0,1,1,1,1,1,0,1],
+ [1,0,0,0,0,0,0,0,0,0,0,0,0,'G',1],
+ [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
 
 const actions=[[1,0],[-1,0],[0,1],[0,-1]];
-let Q={};
-let alpha=0.15, gamma=0.95, epsilon=0.25;
+let Q={}, alpha=.15, gamma=.95, epsilon=.3;
 
-let agent={r:1,c:1};
+let agent={r:1,c:1,key:false};
 let episodes=0;
 
-const key=(r,c)=>`${r},${c}`;
+const k=(r,c,key)=>`${r},${c},${key}`;
 
-function act(state){
-  if(Math.random()<epsilon) return Math.floor(Math.random()*4);
-  let q=Q[state]||[0,0,0,0];
-  return q.indexOf(Math.max(...q));
+function choose(s){
+ if(Math.random()<epsilon) return Math.floor(Math.random()*4);
+ let q=Q[s]||[0,0,0,0];
+ return q.indexOf(Math.max(...q));
 }
 
 function step(){
-  let s=key(agent.r,agent.c);
-  Q[s]=Q[s]||[0,0,0,0];
+ let s=k(agent.r,agent.c,agent.key);
+ Q[s]=Q[s]||[0,0,0,0];
+ let a=choose(s);
+ let [dr,dc]=actions[a];
+ let nr=agent.r+dr, nc=agent.c+dc;
+ let reward=-1, newKey=agent.key;
 
-  let a=act(s);
-  let [dr,dc]=actions[a];
-  let nr=agent.r+dr, nc=agent.c+dc;
+ let cell=maze[nr]?.[nc];
+ if(cell===1){ reward=-6; nr=agent.r; nc=agent.c; }
+ if(cell==='D'&&!agent.key){ reward=-10; nr=agent.r; nc=agent.c; }
+ if(cell==='K'){ reward=30; newKey=true; }
+ if(cell==='G'){ reward=100; }
 
-  let reward=-1;
-  if(maze[nr]?.[nc]===1){ reward=-6; nr=agent.r; nc=agent.c; }
-  if(maze[nr]?.[nc]==='G') reward=100;
+ let ns=k(nr,nc,newKey);
+ Q[ns]=Q[ns]||[0,0,0,0];
+ Q[s][a]+=alpha*(reward+gamma*Math.max(...Q[ns])-Q[s][a]);
 
-  let ns=key(nr,nc);
-  Q[ns]=Q[ns]||[0,0,0,0];
+ agent={r:nr,c:nc,key:newKey};
 
-  Q[s][a]+=alpha*(reward+gamma*Math.max(...Q[ns])-Q[s][a]);
-
-  agent.r=nr; agent.c=nc;
-
-  if(maze[nr][nc]==='G'){
-    agent={r:1,c:1};
-    episodes++;
-  }
+ if(cell==='G'){
+   agent={r:1,c:1,key:false};
+   episodes++;
+ }
 }
 
 function draw(){
-  ctx.clearRect(0,0,600,600);
-  for(let r=0;r<SIZE;r++){
-    for(let c=0;c<SIZE;c++){
-      if(maze[r][c]===1){
-        ctx.fillStyle="#222";
-        ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
-      }
-    }
-  }
-  ctx.fillStyle="#ff4d4d";
-  ctx.fillRect((SIZE-2)*CELL,(SIZE-2)*CELL,CELL,CELL);
+ ctx.clearRect(0,0,480,480);
+ for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+  let x=c*CELL,y=r*CELL;
+  if(maze[r][c]===1){ ctx.fillStyle="#e5e7eb"; ctx.fillRect(x,y,CELL,CELL); }
+  if(maze[r][c]==='K'){ ctx.fillStyle="#facc15"; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,8,0,7); ctx.fill(); }
+  if(maze[r][c]==='D'){ ctx.fillStyle="#a16207"; ctx.fillRect(x+5,y+5,CELL-10,CELL-10); }
+  if(maze[r][c]==='G'){ ctx.fillStyle="#ef4444"; ctx.fillRect(x+4,y+4,CELL-8,CELL-8); }
+ }
+ ctx.fillStyle=agent.key?"#2563eb":"#60a5fa";
+ ctx.beginPath();
+ ctx.arc(agent.c*CELL+CELL/2,agent.r*CELL+CELL/2,10,0,7);
+ ctx.fill();
 
-  ctx.fillStyle="#4da6ff";
-  ctx.beginPath();
-  ctx.arc(agent.c*CELL+CELL/2,agent.r*CELL+CELL/2,CELL/3,0,Math.PI*2);
-  ctx.fill();
-
-  document.getElementById("info").innerText =
-    `Episode: ${episodes} | ε=${epsilon.toFixed(2)}`;
+ document.getElementById("info").innerText=
+ `Episode: ${episodes} | Key: ${agent.key}`;
 }
 
-setInterval(()=>{
-  step();
-  draw();
-},40);
+let timer;
+function run(){
+ clearInterval(timer);
+ timer=setInterval(()=>{ step(); draw(); },
+   document.getElementById("speed").value);
+}
+document.getElementById("speed").oninput=run;
+run();
 </script>
 
 </body>
