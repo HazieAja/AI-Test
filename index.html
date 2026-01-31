@@ -2,107 +2,117 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>RL Maze AI</title>
+<title>RL Maze AI - Advanced</title>
 <style>
-  body { font-family: monospace; }
-  .cell {
-    width: 20px;
-    height: 20px;
-    display: inline-block;
-    text-align: center;
+  body {
+    background:#0e0e11;
+    color:#eaeaea;
+    font-family: monospace;
+    text-align:center;
   }
-  .wall { background:black; }
-  .agent { background:blue; color:white; }
-  .goal { background:red; color:white; }
+  canvas {
+    background:#111;
+    margin-top:10px;
+    border-radius:12px;
+  }
 </style>
 </head>
 <body>
 
-<h3>Reinforcement Learning Maze</h3>
-<div id="maze"></div>
+<h2>Reinforcement Learning Maze AI</h2>
 <p id="info"></p>
+<canvas id="c" width="600" height="600"></canvas>
 
 <script>
-const maze = [
- [0,0,0,0,1],
- [1,1,0,1,0],
- [0,0,0,1,0],
- [0,1,0,0,0],
- [0,0,0,1,'G']
-];
+const SIZE = 21;
+const CELL = 600 / SIZE;
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-const actions = [
- [1,0],[-1,0],[0,1],[0,-1]
-];
+let maze = Array.from({length:SIZE},()=>Array(SIZE).fill(1));
 
-let Q = {};
-let alpha = 0.1;
-let gamma = 0.9;
-let epsilon = 0.2;
+function generateMaze(r=1,c=1){
+  maze[r][c]=0;
+  const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
+  for(let [dr,dc] of dirs){
+    let nr=r+dr, nc=c+dc;
+    if(nr>0&&nc>0&&nr<SIZE-1&&nc<SIZE-1&&maze[nr][nc]){
+      maze[r+dr/2][c+dc/2]=0;
+      generateMaze(nr,nc);
+    }
+  }
+}
+generateMaze();
 
-let agent = { r:0, c:0 };
-let episodes = 0;
+maze[1][1]='S';
+maze[SIZE-2][SIZE-2]='G';
 
-function stateKey(r,c){ return `${r},${c}`; }
+const actions=[[1,0],[-1,0],[0,1],[0,-1]];
+let Q={};
+let alpha=0.15, gamma=0.95, epsilon=0.25;
 
-function chooseAction(state){
-  if(Math.random() < epsilon) return Math.floor(Math.random()*4);
-  let qs = Q[state] || [0,0,0,0];
-  return qs.indexOf(Math.max(...qs));
+let agent={r:1,c:1};
+let episodes=0;
+
+const key=(r,c)=>`${r},${c}`;
+
+function act(state){
+  if(Math.random()<epsilon) return Math.floor(Math.random()*4);
+  let q=Q[state]||[0,0,0,0];
+  return q.indexOf(Math.max(...q));
 }
 
 function step(){
-  let state = stateKey(agent.r, agent.c);
-  Q[state] = Q[state] || [0,0,0,0];
+  let s=key(agent.r,agent.c);
+  Q[s]=Q[s]||[0,0,0,0];
 
-  let action = chooseAction(state);
-  let [dr,dc] = actions[action];
-  let nr = agent.r + dr;
-  let nc = agent.c + dc;
+  let a=act(s);
+  let [dr,dc]=actions[a];
+  let nr=agent.r+dr, nc=agent.c+dc;
 
-  let reward = -1;
-  if(nr<0||nc<0||nr>=5||nc>=5||maze[nr][nc]===1){
-    reward = -5;
-    nr = agent.r; nc = agent.c;
-  }
-  if(maze[nr][nc] === 'G') reward = 50;
+  let reward=-1;
+  if(maze[nr]?.[nc]===1){ reward=-6; nr=agent.r; nc=agent.c; }
+  if(maze[nr]?.[nc]==='G') reward=100;
 
-  let nextState = stateKey(nr,nc);
-  Q[nextState] = Q[nextState] || [0,0,0,0];
+  let ns=key(nr,nc);
+  Q[ns]=Q[ns]||[0,0,0,0];
 
-  Q[state][action] += alpha * (
-    reward + gamma * Math.max(...Q[nextState]) - Q[state][action]
-  );
+  Q[s][a]+=alpha*(reward+gamma*Math.max(...Q[ns])-Q[s][a]);
 
-  agent.r = nr; agent.c = nc;
+  agent.r=nr; agent.c=nc;
 
-  if(maze[nr][nc] === 'G'){
-    agent.r = 0; agent.c = 0;
+  if(maze[nr][nc]==='G'){
+    agent={r:1,c:1};
     episodes++;
   }
 }
 
 function draw(){
-  let html = "";
-  for(let r=0;r<5;r++){
-    for(let c=0;c<5;c++){
-      let cls = "cell";
-      if(maze[r][c]===1) cls+=" wall";
-      if(maze[r][c]==='G') cls+=" goal";
-      if(agent.r===r && agent.c===c) cls+=" agent";
-      html += `<span class="${cls}"></span>`;
+  ctx.clearRect(0,0,600,600);
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      if(maze[r][c]===1){
+        ctx.fillStyle="#222";
+        ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
+      }
     }
-    html+="<br>";
   }
-  document.getElementById("maze").innerHTML = html;
+  ctx.fillStyle="#ff4d4d";
+  ctx.fillRect((SIZE-2)*CELL,(SIZE-2)*CELL,CELL,CELL);
+
+  ctx.fillStyle="#4da6ff";
+  ctx.beginPath();
+  ctx.arc(agent.c*CELL+CELL/2,agent.r*CELL+CELL/2,CELL/3,0,Math.PI*2);
+  ctx.fill();
+
   document.getElementById("info").innerText =
-    `Episode: ${episodes}`;
+    `Episode: ${episodes} | ε=${epsilon.toFixed(2)}`;
 }
 
 setInterval(()=>{
   step();
   draw();
-},100);
+},40);
 </script>
 
 </body>
