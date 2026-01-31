@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>RL Maze AI</title>
+<style>
+  body { font-family: monospace; }
+  .cell {
+    width: 20px;
+    height: 20px;
+    display: inline-block;
+    text-align: center;
+  }
+  .wall { background:black; }
+  .agent { background:blue; color:white; }
+  .goal { background:red; color:white; }
+</style>
+</head>
+<body>
+
+<h3>Reinforcement Learning Maze</h3>
+<div id="maze"></div>
+<p id="info"></p>
+
+<script>
+const maze = [
+ [0,0,0,0,1],
+ [1,1,0,1,0],
+ [0,0,0,1,0],
+ [0,1,0,0,0],
+ [0,0,0,1,'G']
+];
+
+const actions = [
+ [1,0],[-1,0],[0,1],[0,-1]
+];
+
+let Q = {};
+let alpha = 0.1;
+let gamma = 0.9;
+let epsilon = 0.2;
+
+let agent = { r:0, c:0 };
+let episodes = 0;
+
+function stateKey(r,c){ return `${r},${c}`; }
+
+function chooseAction(state){
+  if(Math.random() < epsilon) return Math.floor(Math.random()*4);
+  let qs = Q[state] || [0,0,0,0];
+  return qs.indexOf(Math.max(...qs));
+}
+
+function step(){
+  let state = stateKey(agent.r, agent.c);
+  Q[state] = Q[state] || [0,0,0,0];
+
+  let action = chooseAction(state);
+  let [dr,dc] = actions[action];
+  let nr = agent.r + dr;
+  let nc = agent.c + dc;
+
+  let reward = -1;
+  if(nr<0||nc<0||nr>=5||nc>=5||maze[nr][nc]===1){
+    reward = -5;
+    nr = agent.r; nc = agent.c;
+  }
+  if(maze[nr][nc] === 'G') reward = 50;
+
+  let nextState = stateKey(nr,nc);
+  Q[nextState] = Q[nextState] || [0,0,0,0];
+
+  Q[state][action] += alpha * (
+    reward + gamma * Math.max(...Q[nextState]) - Q[state][action]
+  );
+
+  agent.r = nr; agent.c = nc;
+
+  if(maze[nr][nc] === 'G'){
+    agent.r = 0; agent.c = 0;
+    episodes++;
+  }
+}
+
+function draw(){
+  let html = "";
+  for(let r=0;r<5;r++){
+    for(let c=0;c<5;c++){
+      let cls = "cell";
+      if(maze[r][c]===1) cls+=" wall";
+      if(maze[r][c]==='G') cls+=" goal";
+      if(agent.r===r && agent.c===c) cls+=" agent";
+      html += `<span class="${cls}"></span>`;
+    }
+    html+="<br>";
+  }
+  document.getElementById("maze").innerHTML = html;
+  document.getElementById("info").innerText =
+    `Episode: ${episodes}`;
+}
+
+setInterval(()=>{
+  step();
+  draw();
+},100);
+</script>
+
+</body>
+</html>
