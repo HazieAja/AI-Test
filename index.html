@@ -1,136 +1,165 @@
-<!DOCTYPE html>
-<html lang="id">
+<!DOCTYPE html><html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>RL Maze with Key Challenge</title>
+<title>Multi-Agent Maze AI Simulator</title>
 <style>
   body{
     margin:0;
+    font-family:system-ui, monospace;
+    background:linear-gradient(135deg,#1e1f26,#2b2d42);
+    color:#111;
     display:flex;
-    justify-content:center;
     align-items:center;
+    justify-content:center;
     height:100vh;
-    background:linear-gradient(135deg,#dbeafe,#fef3c7);
-    font-family:monospace;
   }
-  .panel{
-    background:#ffffffcc;
-    padding:20px 30px;
-    border-radius:16px;
-    box-shadow:0 20px 40px rgba(0,0,0,.15);
+  #panel{
+    background:#f8f9ff;
+    padding:16px;
+    border-radius:14px;
+    box-shadow:0 15px 40px rgba(0,0,0,.3);
     text-align:center;
   }
   canvas{
     display:block;
-    margin:15px auto;
-    background:#f8fafc;
-    border-radius:12px;
+    margin:auto;
+    background:#fff;
+    border-radius:10px;
   }
-  input{ width:200px; }
+  select,input,button{
+    margin:4px;
+    padding:6px 10px;
+    border-radius:8px;
+    border:1px solid #ccc;
+  }
+  button{cursor:pointer;}
 </style>
 </head>
 <body>
-
-<div class="panel">
-  <h2>AI Maze — Key Challenge</h2>
-  <div id="info"></div>
-  <canvas id="cv" width="480" height="480"></canvas>
+<div id="panel">
   <div>
-    Speed:
-    <input type="range" min="10" max="200" value="60" id="speed">
+    <select id="mode">
+      <option value="single">Single AI</option>
+      <option value="multi">Multi AI</option>
+    </select>
+    <input id="count" type="number" min="1" max="8" value="2">
+    <select id="speed">
+      <option value="300">Slow</option>
+      <option value="150" selected>Normal</option>
+      <option value="60">Fast</option>
+    </select>
+    <button onclick="startSim()">Start</button>
   </div>
-</div>
+  <canvas id="cv" width="480" height="480"></canvas>
+</div><script>
+const CELL = 30;
+const ROWS = 16;
+const COLS = 16;
 
-<script>
-const SIZE=15, CELL=480/SIZE;
-const cv=document.getElementById("cv");
-const ctx=cv.getContext("2d");
+const grid = [
+"################",
+"#..K.....#....#",
+"#.####.#..#.##.#",
+"#......#......#",
+"#.##.######.##.#",
+"#..#....#.....G#",
+"#..#.##..#.##..##",
+"#......#.......#",
+"################"
+].map(r=>r.split(''));
 
-let maze=[
- [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
- [1,'S',0,0,1,0,0,0,0,0,1,0,0,'K',1],
- [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],
- [1,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
- [1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
- [1,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
- [1,1,1,1,1,0,1,1,1,0,1,1,1,0,1],
- [1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
- [1,0,1,0,1,1,1,0,1,1,1,0,1,0,1],
- [1,0,1,0,0,0,0,0,0,0,1,0,0,0,1],
- [1,0,1,1,1,1,1,1,1,0,1,1,1,'D',1],
- [1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
- [1,1,1,1,1,1,1,0,1,1,1,1,1,0,1],
- [1,0,0,0,0,0,0,0,0,0,0,0,0,'G',1],
- [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-];
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
 
-const actions=[[1,0],[-1,0],[0,1],[0,-1]];
-let Q={}, alpha=.15, gamma=.95, epsilon=.3;
+let agents=[];
+let timer=null;
 
-let agent={r:1,c:1,key:false};
-let episodes=0;
-
-const k=(r,c,key)=>`${r},${c},${key}`;
-
-function choose(s){
- if(Math.random()<epsilon) return Math.floor(Math.random()*4);
- let q=Q[s]||[0,0,0,0];
- return q.indexOf(Math.max(...q));
+function startSim(){
+  clearInterval(timer);
+  agents=[];
+  const m = mode.value;
+  const n = m==="single"?1:Number(count.value);
+  for(let i=0;i<n;i++) agents.push(spawnAgent(i));
+  timer=setInterval(stepAll,Number(speed.value));
 }
 
-function step(){
- let s=k(agent.r,agent.c,agent.key);
- Q[s]=Q[s]||[0,0,0,0];
- let a=choose(s);
- let [dr,dc]=actions[a];
- let nr=agent.r+dr, nc=agent.c+dc;
- let reward=-1, newKey=agent.key;
+function spawnAgent(id){
+  let r,c,safe=false;
+  while(!safe){
+    r=1+Math.floor(Math.random()*6);
+    c=1+Math.floor(Math.random()*14);
+    safe=!agents.some(a=>a.r===r&&a.c===c)&&grid[r][c]==='.';
+  }
+  return {id,r,c,key:false,emotion:'neutral',exprTimer:0};
+}
 
- let cell=maze[nr]?.[nc];
- if(cell===1){ reward=-6; nr=agent.r; nc=agent.c; }
- if(cell==='D'&&!agent.key){ reward=-10; nr=agent.r; nc=agent.c; }
- if(cell==='K'){ reward=30; newKey=true; }
- if(cell==='G'){ reward=100; }
+function occupied(r,c,self){
+  return agents.some(a=>a!==self&&a.r===r&&a.c===c);
+}
 
- let ns=k(nr,nc,newKey);
- Q[ns]=Q[ns]||[0,0,0,0];
- Q[s][a]+=alpha*(reward+gamma*Math.max(...Q[ns])-Q[s][a]);
 
- agent={r:nr,c:nc,key:newKey};
+function stepAll(){
+  for(const a of agents) step(a);
+  draw();
+}
 
- if(cell==='G'){
-   agent={r:1,c:1,key:false};
-   episodes++;
- }
+function setEmotion(a,e,time=12){a.emotion=e;a.exprTimer=time;}
+
+function step(a){
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  const [dr,dc]=dirs[Math.floor(Math.random()*4)];
+  const nr=a.r+dr, nc=a.c+dc;
+
+  if(grid[nr][nc]==='#'){setEmotion(a,'confused');return;}
+  if(occupied(nr,nc,a)){setEmotion(a,'angry');return;}
+
+  a.r=nr; a.c=nc;
+
+  if(grid[nr][nc]==='K'){a.key=true;grid[nr][nc]='.';setEmotion(a,'proud');}
+  if(grid[nr][nc]==='G'){setEmotion(a,'happy',20);}
+}
+
+  a.r=nr; a.c=nc;
+
+  if(grid[nr][nc]==='K'){
+    a.key=true;
+    grid[nr][nc]='.';
+    a.mood=':)';
+    speak(a,'got key');
+  }
+
+  if(grid[nr][nc]==='G'){
+    a.mood='^_^';
+    speak(a,'goal!');
+  }
 }
 
 function draw(){
- ctx.clearRect(0,0,480,480);
- for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
-  let x=c*CELL,y=r*CELL;
-  if(maze[r][c]===1){ ctx.fillStyle="#e5e7eb"; ctx.fillRect(x,y,CELL,CELL); }
-  if(maze[r][c]==='K'){ ctx.fillStyle="#facc15"; ctx.beginPath(); ctx.arc(x+CELL/2,y+CELL/2,8,0,7); ctx.fill(); }
-  if(maze[r][c]==='D'){ ctx.fillStyle="#a16207"; ctx.fillRect(x+5,y+5,CELL-10,CELL-10); }
-  if(maze[r][c]==='G'){ ctx.fillStyle="#ef4444"; ctx.fillRect(x+4,y+4,CELL-8,CELL-8); }
- }
- ctx.fillStyle=agent.key?"#2563eb":"#60a5fa";
- ctx.beginPath();
- ctx.arc(agent.c*CELL+CELL/2,agent.r*CELL+CELL/2,10,0,7);
- ctx.fill();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=c*CELL,y=r*CELL;
+    if(grid[r]?.[c]==='#'){ctx.fillStyle='#333';ctx.fillRect(x,y,CELL,CELL);}
+    else{ctx.strokeStyle='#ddd';ctx.strokeRect(x,y,CELL,CELL);}
+    if(grid[r]?.[c]==='K'){ctx.fillStyle='gold';ctx.fillRect(x+8,y+8,14,14);}
+    if(grid[r]?.[c]==='G'){ctx.fillStyle='lime';ctx.fillRect(x+6,y+6,18,18);}
+  }
 
- document.getElementById("info").innerText=
- `Episode: ${episodes} | Key: ${agent.key}`;
+  for(const a of agents){
+    const x=a.c*CELL+CELL/2;
+    const y=a.r*CELL+CELL/2;
+    ctx.fillStyle='#4dabf7';
+    ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();
+
+    ctx.font='12px monospace';
+    ctx.fillStyle='#000';
+    const emoMap={neutral:':|',happy:':)',confused:'o_O',angry:'>:( ',proud:'›:)',betray:'>:D',sad:';('};
+    ctx.fillText(emoMap[a.emotion]||':|',x+10,y-10);
+    if(a.exprTimer>0)a.exprTimer--;else a.emotion='neutral';
+
+    
+  }
 }
 
-let timer;
-function run(){
- clearInterval(timer);
- timer=setInterval(()=>{ step(); draw(); },
-   document.getElementById("speed").value);
-}
-document.getElementById("speed").oninput=run;
-run();
-</script>
-
-</body>
+draw();
+</script></body>
 </html>
