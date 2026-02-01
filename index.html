@@ -1,13 +1,12 @@
 <!DOCTYPE html><html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Multi-Agent Maze AI Simulator</title>
+<title>Maze AI Simulator (Procedural Maze)</title>
 <style>
   body{
     margin:0;
     font-family:system-ui, monospace;
     background:linear-gradient(135deg,#1e1f26,#2b2d42);
-    color:#111;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -42,7 +41,7 @@
       <option value="single">Single AI</option>
       <option value="multi">Multi AI</option>
     </select>
-    <input id="count" type="number" min="1" max="8" value="2">
+    <input id="count" type="number" min="1" max="6" value="2">
     <select id="speed">
       <option value="300">Slow</option>
       <option value="150" selected>Normal</option>
@@ -52,43 +51,62 @@
   </div>
   <canvas id="cv"></canvas>
 </div><script>
-// ================= MAZE =================
-const CELL = 30;
+// ===== CONFIG =====
+const CELL = 28;
+const MAZE_W = 17; // odd number
+const MAZE_H = 17;
 
-let grid;
-let ROWS, COLS;
+// ===== STATE =====
+let grid, ROWS, COLS;
+let agents=[];
+let spawnPoints={};
+let scores={};
+let timer=null;
+let goalLock=false;
 
-function generateMaze(){
-  grid = [
-    "################",
-    "#..K.....#....#",
-    "#.####.#..#.##.#",
-    "#......#......#",
-    "#.##.######.##.#",
-    "#..#....#.....G#",
-    "#..#.##..#.##..##",
-    "#......#.......#",
-    "################"
-  ].map(r=>r.split(''));
-
-  ROWS = grid.length;
-  COLS = grid[0].length;
-
-  cv.width  = COLS * CELL;
-  cv.height = ROWS * CELL;
-}
-
-// ================= CANVAS =================
+// ===== CANVAS =====
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 
-// ================= AGENTS =================
-let agents=[];
-let timer=null;
-let spawnPoints={};
-let scores={};
-let goalLock=false;
+// ===== MAZE GENERATOR (DFS) =====
+function generateMaze(){
+  ROWS = MAZE_H;
+  COLS = MAZE_W;
 
+  grid = Array.from({length:ROWS},()=>Array(COLS).fill('#'));
+
+  function carve(r,c){
+    grid[r][c]='.';
+    const dirs=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
+    for(const [dr,dc] of dirs){
+      const nr=r+dr, nc=c+dc;
+      if(nr>0 && nc>0 && nr<ROWS-1 && nc<COLS-1 && grid[nr][nc]==='#'){
+        grid[r+dr/2][c+dc/2]='.';
+        carve(nr,nc);
+      }
+    }
+  }
+
+  carve(1,1);
+
+  // place goal
+  grid[ROWS-2][COLS-2]='G';
+
+  // place kill pads
+  for(let i=0;i<5;i++){
+    let r,c;
+    do{
+      r=1+Math.floor(Math.random()*(ROWS-2));
+      c=1+Math.floor(Math.random()*(COLS-2));
+    }while(grid[r][c]!=='.');
+    grid[r][c]='X';
+  }
+
+  cv.width = COLS * CELL;
+  cv.height = ROWS * CELL;
+}
+
+// ===== SIM START =====
 function startSim(){
   clearInterval(timer);
   agents=[];
@@ -98,12 +116,13 @@ function startSim(){
 
   generateMaze();
 
-  const n = mode.value === "single" ? 1 : Number(count.value);
+  const n = mode.value === 'single' ? 1 : Number(count.value);
   for(let i=0;i<n;i++) agents.push(spawnAgent(i));
 
   timer=setInterval(stepAll,Number(speed.value));
 }
 
+// ===== AGENTS =====
 function spawnAgent(id){
   let r,c;
   do{
@@ -114,43 +133,52 @@ function spawnAgent(id){
   spawnPoints[id]={r,c};
   scores[id]=0;
 
-  return {id,r,c,key:false,emotion:'neutral',exprTimer:0};
+  return {id,r,c,penaltyCD:0};
+}
 }
 
 function occupied(r,c,self){
-  return agents.some(a=>a!==self&&a.r===r&&a.c===c);
+  return agents.some(a=>a!==self && a.r===r && a.c===c);
 }
 
-// ================= SIM =================
+// ===== STEP =====
 function stepAll(){
+  if(goalLock) return;
+  for(const a of agents){
+    if(a.penaltyCD>0) a.penaltyCD--;
+    step(a);
+  }
+  draw();
+}
+
+// ===== STEP =====(){
   if(goalLock) return;
   for(const a of agents) step(a);
   draw();
 }
-
-function setEmotion(a,e,time=15){a.emotion=e;a.exprTimer=time;}
 
 function step(a){
   const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
   const [dr,dc]=dirs[Math.floor(Math.random()*4)];
   const nr=a.r+dr, nc=a.c+dc;
 
-  if(grid[nr][nc]==='#'){setEmotion(a,'confused');return;}
-  if(occupied(nr,nc,a)){setEmotion(a,'angry');return;}
+  if(grid[nr][nc]==='#'){
+    scores[a.id]-=20;
+    return;
+  }
+  if(occupied(nr,nc,a)) return;
 
   a.r=nr; a.c=nc;
 
-  if(grid[nr][nc]==='K' && !a.key){
-    a.key=true;
-    grid[nr][nc]='.';
-    setEmotion(a,'proud',25);
+  if(grid[nr][nc]==='X' && a.penaltyCD<=0){
+    scores[a.id]-=200;
+    a.penaltyCD=5;
   }
 
   if(grid[nr][nc]==='G' && !goalLock){
     goalLock=true;
     scores[a.id]++;
-    setEmotion(a,'happy',30);
-    setTimeout(resetRound,800);
+    setTimeout(resetRound,700);
   }
 }
 
@@ -159,21 +187,18 @@ function resetRound(){
     const s=spawnPoints[a.id];
     a.r=s.r;
     a.c=s.c;
-    a.key=false;
-    a.emotion='neutral';
-    a.exprTimer=0;
   }
   goalLock=false;
 }
 
-// ================= DRAW =================
+// ===== DRAW =====
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
 
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
       const cell=grid[r][c];
-      const x=c*CELL,y=r*CELL;
+      const x=c*CELL, y=r*CELL;
 
       if(cell==='#'){
         ctx.fillStyle='#2f2f2f';
@@ -181,16 +206,17 @@ function draw(){
       }else{
         ctx.fillStyle='#fdfdfd';
         ctx.fillRect(x,y,CELL,CELL);
-        ctx.strokeStyle='#e5e5e5';
-        ctx.strokeRect(x,y,CELL,CELL);
       }
 
-      if(cell==='K'){
-        ctx.fillStyle='#f5c542';
-        ctx.beginPath();
-        ctx.arc(x+CELL/2,y+CELL/2,6,0,Math.PI*2);
-        ctx.fill();
+      if(cell==='G'){
+        ctx.fillStyle='#4ade80';
+        ctx.fillRect(x+6,y+6,CELL-12,CELL-12);
       }
+      if(cell==='X'){
+        ctx.fillStyle='#ef4444';
+        ctx.fillRect(x+8,y+8,CELL-16,CELL-16);
+      }
+
       if(cell==='G'){
         ctx.fillStyle='#4ade80';
         ctx.fillRect(x+6,y+6,CELL-12,CELL-12);
@@ -207,20 +233,13 @@ function draw(){
     ctx.arc(ax,ay,10,0,Math.PI*2);
     ctx.fill();
 
-    const emoMap={neutral:'🙂',happy:'🤩',confused:'😕',angry:'😠',proud:'😎',sad:'😢'};
-    ctx.font='16px system-ui';
-    ctx.fillText(emoMap[a.emotion]||'🙂',ax+12,ay-12);
-
-    ctx.font='10px monospace';
     ctx.fillStyle='#000';
+    ctx.font='10px monospace';
     ctx.fillText(`P:${scores[a.id]}`,ax-10,ay+22);
-
-    if(a.exprTimer>0) a.exprTimer--;
-    else a.emotion='neutral';
   }
 }
 
-// initial
+// init
 generateMaze();
 draw();
 </script></body>
