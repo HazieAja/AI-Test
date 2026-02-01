@@ -89,10 +89,10 @@ function generateMaze(){
 
   carve(1,1);
 
-  // place goal
+  // goal
   grid[ROWS-2][COLS-2]='G';
 
-  // place kill pads
+  // kill pads
   for(let i=0;i<5;i++){
     let r,c;
     do{
@@ -104,6 +104,7 @@ function generateMaze(){
 
   cv.width = COLS * CELL;
   cv.height = ROWS * CELL;
+}
 }
 
 // ===== SIM START =====
