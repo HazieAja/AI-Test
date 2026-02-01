@@ -2,34 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Maze AI Simulator v2</title>
+<title>Maze AI Simulator – Emoji Emotion</title>
 
 <style>
-:root{
-  --bg:#0f1220;
-  --panel:#1b1f3a;
-  --accent:#4dabf7;
-  --wall:#2d325a;
-}
-
-*{box-sizing:border-box}
-
 body{
   margin:0;
-  background:radial-gradient(circle at top,var(--panel),var(--bg));
-  font-family:system-ui, monospace;
-  color:#eee;
+  height:100vh;
   display:flex;
   justify-content:center;
   align-items:center;
-  height:100vh;
+  background:radial-gradient(circle at top,#1a1d3a,#0b0e1f);
+  font-family:system-ui, monospace;
 }
 
-#ui{
-  background:rgba(20,25,60,.95);
+#panel{
+  background:#15193a;
   padding:14px;
-  border-radius:16px;
-  box-shadow:0 20px 60px rgba(0,0,0,.6);
+  border-radius:18px;
+  box-shadow:0 25px 70px rgba(0,0,0,.6);
   display:flex;
   flex-direction:column;
   gap:10px;
@@ -42,9 +32,9 @@ body{
 }
 
 select,input,button{
-  background:#0f1430;
+  background:#0d1130;
   color:#fff;
-  border:1px solid #3a3f7a;
+  border:1px solid #3c417a;
   border-radius:8px;
   padding:6px 10px;
 }
@@ -58,27 +48,24 @@ button{
 
 canvas{
   background:#0b0f24;
-  border-radius:12px;
+  border-radius:14px;
 }
 </style>
 </head>
 
 <body>
-<div id="ui">
+<div id="panel">
   <div id="controls">
     <select id="mode">
       <option value="single">Single AI</option>
       <option value="multi">Multi AI</option>
     </select>
-
     <input id="count" type="number" min="1" max="6" value="3">
-
     <select id="speed">
-      <option value="400">Slow</option>
-      <option value="200" selected>Normal</option>
-      <option value="80">Fast</option>
+      <option value="450">Slow</option>
+      <option value="250" selected>Normal</option>
+      <option value="120">Fast</option>
     </select>
-
     <button onclick="start()">START</button>
   </div>
 
@@ -86,7 +73,7 @@ canvas{
 </div>
 
 <script>
-// ================= GRID =================
+// ===== MAZE =====
 const MAZE = [
 "################",
 "#..K.....#....#",
@@ -99,17 +86,28 @@ const MAZE = [
 "################"
 ].map(r=>r.split(""));
 
+const CELL = 32;
 const ROWS = MAZE.length;
 const COLS = MAZE[0].length;
-const CELL = 32;
 
-// ================= CANVAS =================
+// ===== CANVAS =====
 const cv = document.getElementById("cv");
 cv.width  = COLS * CELL;
 cv.height = ROWS * CELL;
 const ctx = cv.getContext("2d");
 
-// ================= AGENT =================
+// ===== EMOJI MAP =====
+const EMOJI = {
+  neutral:"🙂",
+  confused:"😕",
+  angry:"😠",
+  proud:"😎",
+  sad:"😢",
+  betray:"😈",
+  happy:"🤩"
+};
+
+// ===== AGENT =====
 let agents=[];
 let loop=null;
 
@@ -118,72 +116,81 @@ function spawn(id){
   do{
     r=1+Math.floor(Math.random()*(ROWS-2));
     c=1+Math.floor(Math.random()*(COLS-2));
-  }while(MAZE[r][c]!==".");
+  }while(MAZE[r][c]!=='.');
 
   return{
     id,r,c,
-    mood:":|",
+    emotion:"neutral",
+    timer:0,
     color:`hsl(${id*70},70%,60%)`
   };
 }
 
+// ===== CONTROL =====
 function start(){
   clearInterval(loop);
   agents=[];
-  const m=mode.value;
-  const n=m==="single"?1:Number(count.value);
-
+  const n = mode.value==="single"?1:Number(count.value);
   for(let i=0;i<n;i++) agents.push(spawn(i));
   loop=setInterval(stepAll,Number(speed.value));
 }
 
-// ================= LOGIC =================
+// ===== LOGIC =====
+function setEmotion(a,e,duration=18){
+  a.emotion=e;
+  a.timer=duration;
+}
+
 function stepAll(){
   agents.forEach(step);
   draw();
 }
 
 function step(a){
+  if(a.timer>0) a.timer--;
+  else a.emotion="neutral";
+
   const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
   const [dr,dc]=dirs[Math.floor(Math.random()*4)];
   const nr=a.r+dr,nc=a.c+dc;
 
   if(MAZE[nr][nc]==="#"){
-    a.mood=">:/";
+    setEmotion(a,"confused");
     return;
   }
 
   if(agents.some(o=>o!==a&&o.r===nr&&o.c===nc)){
-    a.mood=">:( ";
+    setEmotion(a,"angry");
     return;
   }
 
   a.r=nr; a.c=nc;
-  a.mood=":|";
 
   if(MAZE[nr][nc]==="K"){
     MAZE[nr][nc]=".";
-    a.mood="›:)";
+    setEmotion(a,"proud",30);
   }
+
   if(MAZE[nr][nc]==="G"){
-    a.mood="^_^";
+    setEmotion(a,"happy",40);
   }
 }
 
-// ================= DRAW =================
+// ===== DRAW =====
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
 
+  // maze
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
       const x=c*CELL,y=r*CELL;
       const cell=MAZE[r][c];
 
       if(cell==="#"){
-        ctx.fillStyle= "var(--wall)";
+        ctx.fillStyle="#2d325a";
         ctx.fillRect(x,y,CELL,CELL);
       }else{
-        ctx.strokeStyle="#222";
+        ctx.strokeStyle="#1c204a";
         ctx.strokeRect(x,y,CELL,CELL);
       }
 
@@ -200,18 +207,29 @@ function draw(){
     }
   }
 
+  // agents
   for(const a of agents){
     const x=a.c*CELL+CELL/2;
     const y=a.r*CELL+CELL/2;
 
+    // body
     ctx.fillStyle=a.color;
     ctx.beginPath();
     ctx.arc(x,y,11,0,Math.PI*2);
     ctx.fill();
 
-    ctx.fillStyle="#fff";
-    ctx.font="12px monospace";
-    ctx.fillText(a.mood,x+12,y-10);
+    // emotion bubble
+    const emoji=EMOJI[a.emotion];
+    ctx.font="18px system-ui";
+    const w=26,h=24;
+
+    ctx.fillStyle="rgba(255,255,255,.9)";
+    ctx.beginPath();
+    ctx.roundRect(x+12,y-28,w,h,6);
+    ctx.fill();
+
+    ctx.fillStyle="#000";
+    ctx.fillText(emoji,x+15,y-11);
   }
 }
 
