@@ -1,60 +1,93 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Multi-Agent Maze AI Simulator</title>
+<title>Maze AI Simulator v2</title>
+
 <style>
-  body{
-    margin:0;
-    font-family:system-ui, monospace;
-    background:linear-gradient(135deg,#1e1f26,#2b2d42);
-    color:#111;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    height:100vh;
-  }
-  #panel{
-    background:#f8f9ff;
-    padding:16px;
-    border-radius:14px;
-    box-shadow:0 15px 40px rgba(0,0,0,.3);
-    text-align:center;
-  }
-  canvas{
-    display:block;
-    margin:auto;
-    background:#fff;
-    border-radius:10px;
-  }
-  select,input,button{
-    margin:4px;
-    padding:6px 10px;
-    border-radius:8px;
-    border:1px solid #ccc;
-  }
-  button{cursor:pointer;}
+:root{
+  --bg:#0f1220;
+  --panel:#1b1f3a;
+  --accent:#4dabf7;
+  --wall:#2d325a;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:radial-gradient(circle at top,var(--panel),var(--bg));
+  font-family:system-ui, monospace;
+  color:#eee;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+
+#ui{
+  background:rgba(20,25,60,.95);
+  padding:14px;
+  border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+#controls{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+select,input,button{
+  background:#0f1430;
+  color:#fff;
+  border:1px solid #3a3f7a;
+  border-radius:8px;
+  padding:6px 10px;
+}
+
+button{
+  background:linear-gradient(135deg,#4dabf7,#748ffc);
+  border:none;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+canvas{
+  background:#0b0f24;
+  border-radius:12px;
+}
 </style>
 </head>
+
 <body>
-<div id="panel">
-  <div>
+<div id="ui">
+  <div id="controls">
     <select id="mode">
       <option value="single">Single AI</option>
       <option value="multi">Multi AI</option>
     </select>
-    <input id="count" type="number" min="1" max="8" value="2">
+
+    <input id="count" type="number" min="1" max="6" value="3">
+
     <select id="speed">
-      <option value="300">Slow</option>
-      <option value="150" selected>Normal</option>
-      <option value="60">Fast</option>
+      <option value="400">Slow</option>
+      <option value="200" selected>Normal</option>
+      <option value="80">Fast</option>
     </select>
-    <button onclick="startSim()">Start</button>
+
+    <button onclick="start()">START</button>
   </div>
-  <canvas id="cv" width="480" height="480"></canvas>
-</div><script>
-const CELL = 30;
 
-const grid = [
+  <canvas id="cv"></canvas>
+</div>
+
+<script>
+// ================= GRID =================
+const MAZE = [
 "################",
 "#..K.....#....#",
 "#.####.#..#.##.#",
@@ -64,141 +97,125 @@ const grid = [
 "#..#.##..#.##..##",
 "#......#.......#",
 "################"
-].map(r=>r.split(''));
+].map(r=>r.split(""));
 
-const ROWS = grid.length;
-const COLS = grid[0].length;
+const ROWS = MAZE.length;
+const COLS = MAZE[0].length;
+const CELL = 32;
 
-const grid = [
-"################",
-"#..K.....#....#",
-"#.####.#..#.##.#",
-"#......#......#",
-"#.##.######.##.#",
-"#..#....#.....G#",
-"#..#.##..#.##..##",
-"#......#.......#",
-"################"
-].map(r=>r.split(''));
+// ================= CANVAS =================
+const cv = document.getElementById("cv");
+cv.width  = COLS * CELL;
+cv.height = ROWS * CELL;
+const ctx = cv.getContext("2d");
 
-const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
-
+// ================= AGENT =================
 let agents=[];
-let timer=null;
+let loop=null;
 
-function startSim(){
-  clearInterval(timer);
+function spawn(id){
+  let r,c;
+  do{
+    r=1+Math.floor(Math.random()*(ROWS-2));
+    c=1+Math.floor(Math.random()*(COLS-2));
+  }while(MAZE[r][c]!==".");
+
+  return{
+    id,r,c,
+    mood:":|",
+    color:`hsl(${id*70},70%,60%)`
+  };
+}
+
+function start(){
+  clearInterval(loop);
   agents=[];
-  const m = mode.value;
-  const n = m==="single"?1:Number(count.value);
-  for(let i=0;i<n;i++) agents.push(spawnAgent(i));
-  timer=setInterval(stepAll,Number(speed.value));
+  const m=mode.value;
+  const n=m==="single"?1:Number(count.value);
+
+  for(let i=0;i<n;i++) agents.push(spawn(i));
+  loop=setInterval(stepAll,Number(speed.value));
 }
 
-function spawnAgent(id){
-  let r,c,safe=false;
-  while(!safe){
-    r=1+Math.floor(Math.random()*6);
-    c=1+Math.floor(Math.random()*14);
-    safe=!agents.some(a=>a.r===r&&a.c===c)&&grid[r][c]==='.';
-  }
-  return {id,r,c,key:false,emotion:'neutral',exprTimer:0};
-}
-
-function occupied(r,c,self){
-  return agents.some(a=>a!==self&&a.r===r&&a.c===c);
-}
-
-
+// ================= LOGIC =================
 function stepAll(){
-  for(const a of agents) step(a);
+  agents.forEach(step);
   draw();
 }
-
-function setEmotion(a,e,time=12){a.emotion=e;a.exprTimer=time;}
 
 function step(a){
   const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
   const [dr,dc]=dirs[Math.floor(Math.random()*4)];
-  const nr=a.r+dr, nc=a.c+dc;
+  const nr=a.r+dr,nc=a.c+dc;
 
-  if(grid[nr][nc]==='#'){setEmotion(a,'confused');return;}
-  if(occupied(nr,nc,a)){setEmotion(a,'angry');return;}
-
-  a.r=nr; a.c=nc;
-
-  if(grid[nr][nc]==='K'){a.key=true;grid[nr][nc]='.';setEmotion(a,'proud');}
-  if(grid[nr][nc]==='G'){setEmotion(a,'happy',20);}
-}
-
-  a.r=nr; a.c=nc;
-
-  if(grid[nr][nc]==='K'){
-    a.key=true;
-    grid[nr][nc]='.';
-    a.mood=':)';
-    speak(a,'got key');
+  if(MAZE[nr][nc]==="#"){
+    a.mood=">:/";
+    return;
   }
 
-  if(grid[nr][nc]==='G'){
-    a.mood='^_^';
-    speak(a,'goal!');
+  if(agents.some(o=>o!==a&&o.r===nr&&o.c===nc)){
+    a.mood=">:( ";
+    return;
+  }
+
+  a.r=nr; a.c=nc;
+  a.mood=":|";
+
+  if(MAZE[nr][nc]==="K"){
+    MAZE[nr][nc]=".";
+    a.mood="›:)";
+  }
+  if(MAZE[nr][nc]==="G"){
+    a.mood="^_^";
   }
 }
 
+// ================= DRAW =================
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
 
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
-      const cell = grid[r][c];
-      const x = c * CELL;
-      const y = r * CELL;
+      const x=c*CELL,y=r*CELL;
+      const cell=MAZE[r][c];
 
-      if(cell === '#'){
-        ctx.fillStyle = '#2f2f2f';
+      if(cell==="#"){
+        ctx.fillStyle= "var(--wall)";
         ctx.fillRect(x,y,CELL,CELL);
-      } else {
-        ctx.fillStyle = '#fdfdfd';
-        ctx.fillRect(x,y,CELL,CELL);
-        ctx.strokeStyle = '#e5e5e5';
+      }else{
+        ctx.strokeStyle="#222";
         ctx.strokeRect(x,y,CELL,CELL);
       }
 
-      if(cell === 'K'){
-        ctx.fillStyle = '#f5c542';
-        ctx.beginPath();
-        ctx.arc(x+CELL/2,y+CELL/2,6,0,Math.PI*2);
-        ctx.fill();
+      if(cell==="K"){
+        ctx.fillStyle="gold";
+        ctx.fillRect(x+10,y+10,12,12);
       }
-
-      if(cell === 'G'){
-        ctx.fillStyle = '#4ade80';
-        ctx.fillRect(x+6,y+6,CELL-12,CELL-12);
+      if(cell==="G"){
+        ctx.fillStyle="lime";
+        ctx.beginPath();
+        ctx.arc(x+CELL/2,y+CELL/2,8,0,Math.PI*2);
+        ctx.fill();
       }
     }
   }
 
   for(const a of agents){
-    const ax = a.c*CELL + CELL/2;
-    const ay = a.r*CELL + CELL/2;
+    const x=a.c*CELL+CELL/2;
+    const y=a.r*CELL+CELL/2;
 
-    ctx.fillStyle = '#4dabf7';
+    ctx.fillStyle=a.color;
     ctx.beginPath();
-    ctx.arc(ax,ay,10,0,Math.PI*2);
+    ctx.arc(x,y,11,0,Math.PI*2);
     ctx.fill();
 
-    ctx.font='12px monospace';
-    ctx.fillStyle='#111';
-    const emoMap={neutral:':|',happy:':)',confused:'o_O',angry:'>:( ',proud:'›:)',betray:'>:D',sad:';('};
-    ctx.fillText(emoMap[a.emotion]||':|',ax+12,ay-12);
-
-    if(a.exprTimer>0) a.exprTimer--;
-    else a.emotion='neutral';
+    ctx.fillStyle="#fff";
+    ctx.font="12px monospace";
+    ctx.fillText(a.mood,x+12,y-10);
   }
 }
 
 draw();
-</script></body>
+</script>
+</body>
 </html>
