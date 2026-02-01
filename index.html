@@ -58,9 +58,7 @@ button:hover{background:#4f46e5;}
       <option value="300">Slow</option>
       <option value="150" selected>Normal</option>
       <option value="60">Fast</option>
-    </select>
-    <button onclick="startSim()">Start</button>
-  </div>
+    </select>  </div>
   <canvas id="cv"></canvas>
 </div><script>
 // ===== CONFIG =====
@@ -120,7 +118,7 @@ function generateMaze(){
 }
 
 // ===== SIM START =====
-function startSim(){
+function autoStart(){
   clearInterval(timer);
   agents=[];
   spawnPoints={};
@@ -258,8 +256,25 @@ function draw(){
   }
 }
 
-// init
-generateMaze();
-draw();
-</script></body>
-</html>
+// ===== AUTO START =====
+function autoStart(){
+  clearInterval(timer);
+  agents=[];
+  spawnPoints={};
+  scores={};
+  goalLock=false;
+
+  generateMaze();
+  draw();
+
+  const n = mode.value === 'single' ? 1 : Number(count.value);
+  for(let i=0;i<n;i++) agents.push(spawnAgent(i));
+
+  timer=setInterval(stepAll,Number(speed.value));
+}
+
+// langsung jalan
+setTimeout(autoStart,100);
+
+// restart otomatis kalau setting berubah
+mode.onchange = count.onchange = speed.onchange = autoStart;
